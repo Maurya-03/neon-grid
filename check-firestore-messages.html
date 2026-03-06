@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Firestore Messages Checker</title>
+    <script type="module">
+        // Paste your Firebase config here
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+        import { getFirestore, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+        // Replace with your Firebase config from .env
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        async function checkMessages() {
+            try {
+                console.log("Checking Firestore for messages...");
+                
+                // Get all rooms
+                const roomsSnapshot = await getDocs(collection(db, 'rooms'));
+                console.log(`Found ${roomsSnapshot.size} rooms`);
+                
+                for (const roomDoc of roomsSnapshot.docs) {
+                    console.log(`\n=== Room: ${roomDoc.id} ===`);
+                    console.log("Room data:", roomDoc.data());
+                    
+                    // Get messages for this room
+                    const messagesSnapshot = await getDocs(collection(db, 'rooms', roomDoc.id, 'messages'));
+                    console.log(`  Messages count: ${messagesSnapshot.size}`);
+                    
+                    messagesSnapshot.docs.forEach((msgDoc, index) => {
+                        const data = msgDoc.data();
+                        console.log(`  Message ${index}:`, {
+                            id: msgDoc.id,
+                            sender: data.sender,
+                            text: data.text?.substring(0, 50),
+                            hasMediaURL: !!data.mediaURL,
+                            mediaURL: data.mediaURL,
+                            mediaType: data.mediaType,
+                            allFields: Object.keys(data)
+                        });
+                    });
+                }
+                
+                document.getElementById('status').textContent = 'Check complete! See console for results.';
+            } catch (error) {
+                console.error("Error checking messages:", error);
+                document.getElementById('status').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        window.checkMessages = checkMessages;
+    </script>
+</head>
+<body style="font-family: Arial; padding: 20px;">
+    <h1>Firestore Messages Checker</h1>
+    <p>Before using this tool:</p>
+    <ol>
+        <li>Open this file in a text editor</li>
+        <li>Replace the Firebase config values with your actual values from .env</li>
+        <li>Save the file</li>
+        <li>Open this file in your browser</li>
+        <li>Click the button below</li>
+        <li>Check the browser console (F12) for results</li>
+    </ol>
+    <button onclick="checkMessages()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
+        Check Firestore Messages
+    </button>
+    <p id="status" style="margin-top: 20px; font-weight: bold;"></p>
+</body>
+</html>

@@ -1,0 +1,23 @@
+rules_version = '2';
+
+// Firebase Storage Security Rules for NeonGrid
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow read access to all files (for public chat media)
+    match /chat-media/{allPaths=**} {
+      allow read: if true;
+
+      // Allow write access for authenticated users or anonymous users
+      // (since the app uses anonymous auth, we allow all uploads and rely on client-side validation)
+      allow write: if true;
+
+      // Allow delete for admin operations (client-side validation)
+      allow delete: if true;
+    }
+
+    // Deny access to all other files
+    match /{allPaths=**} {
+      allow read, write, delete: if false;
+    }
+  }
+}
