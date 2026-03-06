@@ -19,7 +19,7 @@ service cloud.firestore {
 
       // Allow updates for room stats and locking (anonymous users allowed for basic updates)
       allow update: if
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activeUsers', 'locked', 'lastActivity']);
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activeUsers', 'locked', 'lastActivity', 'allowFiles', 'allowLinks', 'allowReactions', 'allowThreads']);
 
       // Allow deletion for admin operations (client-side validation)
       allow delete: if true;
@@ -42,18 +42,42 @@ service cloud.firestore {
             (request.resource.data.mediaUrl is string && request.resource.data.mediaUrl.size() > 0)
           );
 
-        // Allow updates for admin moderation (flagging/deleting) - client-side validation
+        // Allow updates for admin moderation (flagging/deleting/pinning) - client-side validation
         allow update: if
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['flagged', 'deleted']);
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['flagged', 'deleted', 'pinned']);
 
         // Allow deletion for admin operations - client-side validation
         allow delete: if true;
       }
     }
 
-    // Deny all other access
-    match /{document=**} {
-      allow read, write: if false;
+    // Presence collection for active user tracking
+    match /presence/{presenceId} {
+      // Anyone can read presence
+      allow read: if true;
+
+      // Anyone can create/update their own presence
+      allow create, update: if true;
+
+      // Allow deletion for cleanup
+      allow delete: if true;
+    }
+
+    // Room events collection for activity logging
+    match /room_events/{eventId} {
+      // Anyone can read room events
+      allow read: if true;
+
+      // Allow creating events with proper structure
+      allow create: if
+        resource == null &&
+        request.resource.data.keys().hasAll(['roomId', 'type', 'user', 'timestamp']) &&
+        request.resource.data.roomId is string &&
+        request.resource.data.type is string &&
+        request.resource.data.user is string;
+
+      // No updates or deletes allowed (events are immutable logs)
+      allow update, delete: if false;
     }
   }
 }

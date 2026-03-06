@@ -46,24 +46,31 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
   const { user } = useAnonymousUser();
 
-  const [error, setError] = useState<string | null>(null);
-
   useEffect(() => {
     const loadRooms = async () => {
       try {
+        console.log("🏠 Starting to load rooms from Index page...");
+
+        // Test connection first
+        const connectionOk = await roomService.testConnection();
+        if (!connectionOk) {
+          console.error("❌ Connection test failed on Index page");
+          return;
+        }
+
+        console.log("✅ Connection OK, fetching rooms...");
         const fetchedRooms = await roomService.getRooms();
+        console.log("📦 Fetched rooms:", fetchedRooms);
         setRooms(fetchedRooms);
-      } catch (err: any) {
-        console.error("❌ Failed to load rooms:", err);
-        setError(err?.message || "Failed to connect to Firebase");
+      } catch (error) {
+        console.error("❌ Failed to load rooms:", error);
+        console.error("🔍 Error details:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    // 8-second timeout so loading never hangs forever
-    const timeout = setTimeout(() => setLoading(false), 8000);
-    loadRooms().then(() => clearTimeout(timeout));
+    loadRooms();
   }, []);
 
   const handleRoomCreated = (roomId: string) => {
@@ -188,12 +195,6 @@ const Index = () => {
                 <div className="animate-pulse text-neon-cyan">
                   Loading rooms...
                 </div>
-              </div>
-            ) : error ? (
-              <div className="col-span-2 text-center py-12">
-                <MessageSquare className="h-12 w-12 mx-auto mb-4 text-neon-red/50" />
-                <p className="text-lg mb-2 text-neon-red">Failed to load rooms</p>
-                <p className="text-text-secondary text-sm">{error}</p>
               </div>
             ) : rooms.length === 0 ? (
               <div className="col-span-2 text-center py-12 text-text-secondary">

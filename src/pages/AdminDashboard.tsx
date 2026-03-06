@@ -14,6 +14,10 @@ import {
   Lock,
   Unlock,
   AlertTriangle,
+  FileText,
+  FileSpreadsheet,
+  Presentation,
+  File,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
@@ -23,12 +27,30 @@ import { Button } from "@/components/ui/button";
 import { useAdmin } from "@/lib/admin-service";
 import { roomService, Room, Message } from "@/lib/room-service";
 import { useToast } from "@/hooks/use-toast";
+import { Timestamp } from "firebase/firestore";
+
+// Helper function to safely convert Firebase Timestamp to Date
+const toSafeDate = (timestamp: any): Date | null => {
+  if (!timestamp) return null;
+  if (timestamp instanceof Date) return timestamp;
+  if (timestamp.toDate && typeof timestamp.toDate === "function") {
+    return timestamp.toDate();
+  }
+  if (timestamp.seconds) {
+    return new Date(timestamp.seconds * 1000);
+  }
+  return null;
+};
 
 // Admin Dashboard - Connected to real Firebase data
 // Login with: username "admin", password "NeonGrid2025!"
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState("rooms");
+  const [mediaFiles, setMediaFiles] = useState<
+    (Message & { roomId: string })[]
+  >([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
   const { session, logout } = useAdmin();
   const { toast } = useToast();
 
@@ -56,18 +78,28 @@ const AdminDashboard = () => {
 
       // Get recent messages from all rooms
       const allMessages: (Message & { roomId: string })[] = [];
+      const allMedia: (Message & { roomId: string })[] = [];
       for (const room of roomsData.slice(0, 5)) {
         // Limit to first 5 rooms for performance
         try {
           const messages = await roomService.getMessages(room.id!);
+          const mediaMessages = await roomService.getMediaMessages(room.id!);
           // Add roomId to each message
           const messagesWithRoomId = messages.map((msg) => ({
             ...msg,
             roomId: room.id!,
           }));
+          const mediaWithRoomId = mediaMessages.map((msg) => ({
+            ...msg,
+            roomId: room.id!,
+          }));
           allMessages.push(...messagesWithRoomId.slice(-3)); // Get last 3 messages per room
+          allMedia.push(...mediaWithRoomId);
         } catch (error) {
-          console.warn(`Failed to load messages for room ${room.id}:`, error);
+          console.warn(
+            `Failed to load messages/media for room ${room.id}:`,
+            error,
+          );
         }
       }
 
@@ -87,6 +119,7 @@ const AdminDashboard = () => {
         .slice(0, 10);
 
       setRecentMessages(sortedMessages);
+      setMediaFiles(allMedia);
       console.log("✅ Admin: Data loaded successfully");
     } catch (error) {
       console.error("❌ Admin: Failed to load data:", error);
@@ -191,6 +224,9 @@ const AdminDashboard = () => {
         ),
       );
 
+      // Also remove from media files if it exists there
+      setMediaFiles(mediaFiles.filter((msg) => msg.id !== messageId));
+
       console.log("✅ Admin: Message deleted successfully");
       toast({
         title: "Success",
@@ -226,9 +262,16 @@ const AdminDashboard = () => {
       });
       await roomService.flagMessage(roomId, messageId, flagged);
 
-      // Update the local state
+      // Update the local state in recent messages
       setRecentMessages(
         recentMessages.map((msg) =>
+          msg.id === messageId ? { ...msg, flagged } : msg,
+        ),
+      );
+
+      // Update the local state in media files
+      setMediaFiles(
+        mediaFiles.map((msg) =>
           msg.id === messageId ? { ...msg, flagged } : msg,
         ),
       );
@@ -493,11 +536,9 @@ const AdminDashboard = () => {
                                 className="text-text-tertiary"
                               >
                                 Created{" "}
-                                {room.createdAt instanceof Date
-                                  ? room.createdAt.toLocaleDateString()
-                                  : room.createdAt
-                                      .toDate()
-                                      .toLocaleDateString()}
+                                {toSafeDate(
+                                  room.createdAt,
+                                )?.toLocaleDateString() || "N/A"}
                               </Badge>
                             </div>
                           </div>
@@ -590,9 +631,9 @@ const AdminDashboard = () => {
                               </span>
                               <span className="text-text-tertiary">•</span>
                               <span className="text-sm text-text-tertiary">
-                                {message.timestamp instanceof Date
-                                  ? message.timestamp.toLocaleString()
-                                  : message.timestamp.toDate().toLocaleString()}
+                                {toSafeDate(
+                                  message.timestamp,
+                                )?.toLocaleString() || "N/A"}
                               </span>
                               {message.flagged && (
                                 <Badge
@@ -618,28 +659,111 @@ const AdminDashboard = () => {
                               </p>
                             )}
 
-                            {message.mediaURL && !message.deleted && (
+                            {message.mediaUrl && !message.deleted && (
                               <div className="mb-2">
-                                {message.mediaType === "image" ? (
+                                {message.mediaType?.includes("image") ? (
                                   <img
-                                    src={message.mediaURL}
+                                    src={message.mediaUrl}
                                     alt="Shared image"
                                     className="max-w-sm max-h-64 rounded border border-bg-600"
                                   />
-                                ) : message.mediaType === "video" ? (
+                                ) : message.mediaType?.includes("video") ? (
                                   <video
-                                    src={message.mediaURL}
+                                    src={message.mediaUrl}
                                     controls
                                     className="max-w-sm max-h-64 rounded border border-bg-600"
                                   />
-                                ) : (
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-xs"
-                                  >
-                                    {message.mediaType} media
-                                  </Badge>
-                                )}
+                                ) : message.mediaType === "application/pdf" ? (
+                                  <div className="flex items-center gap-2 p-3 bg-bg-800/50 border border-neon-cyan/30 rounded">
+                                    <FileText className="h-6 w-6 text-neon-cyan" />
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-text-primary">
+                                        PDF Document
+                                      </p>
+                                    </div>
+                                    <a
+                                      href={message.mediaUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="px-3 py-1 bg-neon-cyan/10 hover:bg-neon-cyan/20 border border-neon-cyan/50 rounded text-neon-cyan text-xs font-medium transition-colors"
+                                    >
+                                      Open
+                                    </a>
+                                  </div>
+                                ) : message.mediaType?.includes("word") ||
+                                  message.mediaType?.includes("document") ? (
+                                  <div className="flex items-center gap-2 p-3 bg-bg-800/50 border border-neon-violet/30 rounded">
+                                    <FileText className="h-6 w-6 text-neon-violet" />
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-text-primary">
+                                        Word Document
+                                      </p>
+                                    </div>
+                                    <a
+                                      href={message.mediaUrl}
+                                      download
+                                      className="px-3 py-1 bg-neon-violet/10 hover:bg-neon-violet/20 border border-neon-violet/50 rounded text-neon-violet text-xs font-medium transition-colors"
+                                    >
+                                      Download
+                                    </a>
+                                  </div>
+                                ) : message.mediaType?.includes(
+                                    "presentation",
+                                  ) ||
+                                  message.mediaType?.includes("powerpoint") ? (
+                                  <div className="flex items-center gap-2 p-3 bg-bg-800/50 border border-neon-gold/30 rounded">
+                                    <Presentation className="h-6 w-6 text-neon-gold" />
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-text-primary">
+                                        PowerPoint
+                                      </p>
+                                    </div>
+                                    <a
+                                      href={message.mediaUrl}
+                                      download
+                                      className="px-3 py-1 bg-neon-gold/10 hover:bg-neon-gold/20 border border-neon-gold/50 rounded text-neon-gold text-xs font-medium transition-colors"
+                                    >
+                                      Download
+                                    </a>
+                                  </div>
+                                ) : message.mediaType?.includes(
+                                    "spreadsheet",
+                                  ) || message.mediaType?.includes("excel") ? (
+                                  <div className="flex items-center gap-2 p-3 bg-bg-800/50 border border-neon-green/30 rounded">
+                                    <FileSpreadsheet className="h-6 w-6 text-neon-green" />
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-text-primary">
+                                        Excel File
+                                      </p>
+                                    </div>
+                                    <a
+                                      href={message.mediaUrl}
+                                      download
+                                      className="px-3 py-1 bg-neon-green/10 hover:bg-neon-green/20 border border-neon-green/50 rounded text-neon-green text-xs font-medium transition-colors"
+                                    >
+                                      Download
+                                    </a>
+                                  </div>
+                                ) : message.mediaType ? (
+                                  <div className="flex items-center gap-2 p-3 bg-bg-800/50 border border-text-tertiary/30 rounded">
+                                    <File className="h-6 w-6 text-text-tertiary" />
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-text-primary">
+                                        File Attachment
+                                      </p>
+                                      <p className="text-xs text-text-tertiary">
+                                        {message.mediaType}
+                                      </p>
+                                    </div>
+                                    <a
+                                      href={message.mediaUrl}
+                                      download
+                                      className="px-3 py-1 bg-text-tertiary/10 hover:bg-text-tertiary/20 border border-text-tertiary/50 rounded text-text-tertiary text-xs font-medium transition-colors"
+                                    >
+                                      Download
+                                    </a>
+                                  </div>
+                                ) : null}
                               </div>
                             )}
                           </div>
@@ -687,8 +811,240 @@ const AdminDashboard = () => {
               </div>
             )}
 
+            {/* Media Gallery Tab */}
+            {activeTab === "media" && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <h2 className="text-xl font-orbitron font-semibold text-text-primary">
+                    Media Gallery
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="text-xs">
+                      {mediaFiles.length} files
+                    </Badge>
+                    <NeonButton
+                      variant="outline"
+                      size="sm"
+                      onClick={loadAdminData}
+                      disabled={loading}
+                    >
+                      <Search className="h-4 w-4" />
+                      Refresh
+                    </NeonButton>
+                  </div>
+                </div>
+                {mediaLoading ? (
+                  <div className="text-center py-12">
+                    <div className="w-12 h-12 border-4 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                    <p className="text-text-secondary">
+                      Loading media files...
+                    </p>
+                  </div>
+                ) : mediaFiles.length === 0 ? (
+                  <GlassCard variant="default" className="p-12 text-center">
+                    <Image className="h-12 w-12 mx-auto mb-4 text-text-tertiary" />
+                    <h3 className="text-lg font-semibold text-text-primary mb-2">
+                      No media files found
+                    </h3>
+                    <p className="text-text-secondary">
+                      Media files will appear here as users upload them.
+                    </p>
+                  </GlassCard>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {mediaFiles.map((file) => (
+                      <GlassCard
+                        key={file.id}
+                        variant="default"
+                        className="p-4 relative group"
+                      >
+                        <div className="flex flex-col">
+                          <div className="mb-3 relative">
+                            {file.mediaType?.includes("image") ? (
+                              <img
+                                src={file.mediaUrl!}
+                                alt={file.text || "media"}
+                                className="w-full h-48 object-cover rounded border border-bg-600"
+                              />
+                            ) : file.mediaType?.includes("video") ? (
+                              <video
+                                src={file.mediaUrl!}
+                                controls
+                                className="w-full h-48 object-cover rounded border border-bg-600"
+                              />
+                            ) : file.mediaType === "application/pdf" ? (
+                              <div className="w-full h-48 flex flex-col items-center justify-center bg-bg-800 border border-neon-cyan/30 rounded gap-3">
+                                <FileText className="h-16 w-16 text-neon-cyan" />
+                                <div className="text-center">
+                                  <p className="text-sm font-medium text-text-primary mb-1">
+                                    PDF Document
+                                  </p>
+                                  <a
+                                    href={file.mediaUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-neon-cyan hover:underline text-xs"
+                                  >
+                                    Open in new tab
+                                  </a>
+                                </div>
+                              </div>
+                            ) : file.mediaType?.includes("word") ||
+                              file.mediaType?.includes("document") ? (
+                              <div className="w-full h-48 flex flex-col items-center justify-center bg-bg-800 border border-neon-violet/30 rounded gap-3">
+                                <FileText className="h-16 w-16 text-neon-violet" />
+                                <div className="text-center">
+                                  <p className="text-sm font-medium text-text-primary mb-1">
+                                    Word Document
+                                  </p>
+                                  <a
+                                    href={file.mediaUrl}
+                                    download
+                                    className="text-neon-violet hover:underline text-xs"
+                                  >
+                                    Download
+                                  </a>
+                                </div>
+                              </div>
+                            ) : file.mediaType?.includes("presentation") ||
+                              file.mediaType?.includes("powerpoint") ? (
+                              <div className="w-full h-48 flex flex-col items-center justify-center bg-bg-800 border border-neon-gold/30 rounded gap-3">
+                                <Presentation className="h-16 w-16 text-neon-gold" />
+                                <div className="text-center">
+                                  <p className="text-sm font-medium text-text-primary mb-1">
+                                    PowerPoint Presentation
+                                  </p>
+                                  <a
+                                    href={file.mediaUrl}
+                                    download
+                                    className="text-neon-gold hover:underline text-xs"
+                                  >
+                                    Download
+                                  </a>
+                                </div>
+                              </div>
+                            ) : file.mediaType?.includes("spreadsheet") ||
+                              file.mediaType?.includes("excel") ? (
+                              <div className="w-full h-48 flex flex-col items-center justify-center bg-bg-800 border border-neon-green/30 rounded gap-3">
+                                <FileSpreadsheet className="h-16 w-16 text-neon-green" />
+                                <div className="text-center">
+                                  <p className="text-sm font-medium text-text-primary mb-1">
+                                    Excel Spreadsheet
+                                  </p>
+                                  <a
+                                    href={file.mediaUrl}
+                                    download
+                                    className="text-neon-green hover:underline text-xs"
+                                  >
+                                    Download
+                                  </a>
+                                </div>
+                              </div>
+                            ) : file.mediaUrl ? (
+                              <div className="w-full h-48 flex flex-col items-center justify-center bg-bg-800 border border-text-tertiary/30 rounded gap-3">
+                                <File className="h-16 w-16 text-text-tertiary" />
+                                <div className="text-center">
+                                  <p className="text-sm font-medium text-text-primary mb-1">
+                                    File Attachment
+                                  </p>
+                                  <p className="text-xs text-text-tertiary mb-1">
+                                    {file.mediaType
+                                      ?.split("/")[1]
+                                      ?.toUpperCase() || "Unknown"}
+                                  </p>
+                                  <a
+                                    href={file.mediaUrl}
+                                    download
+                                    className="text-text-tertiary hover:underline text-xs"
+                                  >
+                                    Download
+                                  </a>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="w-full h-48 flex items-center justify-center bg-bg-800 border border-bg-600 rounded">
+                                <span className="text-text-secondary">
+                                  Unknown file type
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="space-y-1 mb-3">
+                            <div className="flex items-center justify-between">
+                              <Badge variant="outline" className="text-xs">
+                                {file.mediaType || "file"}
+                              </Badge>
+                              {file.flagged && (
+                                <Badge
+                                  variant="destructive"
+                                  className="text-xs"
+                                >
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                  Flagged
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-xs text-text-secondary">
+                              <span className="text-neon-cyan font-medium">
+                                {file.sender}
+                              </span>
+                            </div>
+                            {file.text && (
+                              <div className="text-xs text-text-primary line-clamp-2">
+                                {file.text}
+                              </div>
+                            )}
+                            <div className="text-xs text-text-tertiary">
+                              Room:{" "}
+                              {rooms.find((r) => r.id === file.roomId)?.name ||
+                                file.roomId}
+                            </div>
+                            <div className="text-xs text-text-tertiary">
+                              {toSafeDate(file.timestamp)?.toLocaleString() ||
+                                ""}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <NeonButton
+                              variant="ghost"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() =>
+                                handleFlagMessage(
+                                  file.roomId,
+                                  file.id!,
+                                  !file.flagged,
+                                )
+                              }
+                              title={file.flagged ? "Unflag" : "Flag"}
+                            >
+                              <AlertTriangle className="h-4 w-4" />
+                            </NeonButton>
+                            <NeonButton
+                              variant="red"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() =>
+                                handleDeleteMessage(file.roomId, file.id!)
+                              }
+                              disabled={deletingMessage === file.id}
+                              title="Delete media"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              {deletingMessage === file.id
+                                ? "Deleting..."
+                                : "Delete"}
+                            </NeonButton>
+                          </div>
+                        </div>
+                      </GlassCard>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {/* Placeholder for other tabs */}
-            {!["rooms", "messages"].includes(activeTab) && (
+            {!["rooms", "messages", "media"].includes(activeTab) && (
               <GlassCard variant="default" className="p-12 text-center">
                 <div className="max-w-md mx-auto">
                   <h3 className="text-xl font-orbitron font-semibold text-neon-cyan mb-4">

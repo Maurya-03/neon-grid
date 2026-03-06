@@ -3,7 +3,7 @@ import React, { useState, useEffect, createContext, useContext } from "react";
 // Admin credentials from environment variables
 const ADMIN_CREDENTIALS = {
   username: import.meta.env.VITE_ADMIN_USERNAME || "admin",
-  password: import.meta.env.VITE_ADMIN_PASSWORD || "NeonGrid2025!",
+  password: import.meta.env.VITE_ADMIN_PASSWORD || "admin123",
   email: import.meta.env.VITE_ADMIN_EMAIL || "admin@neongrid.com",
 };
 
@@ -21,7 +21,7 @@ export const adminService = {
   // Authenticate admin with hardcoded credentials
   authenticate(
     username: string,
-    password: string
+    password: string,
   ): Promise<AdminSession | null> {
     return new Promise((resolve) => {
       console.log("🔐 Admin authentication attempt:", {
@@ -61,7 +61,7 @@ export const adminService = {
               ...session,
               loginTime: session.loginTime.toISOString(),
               expiresAt: session.expiresAt.toISOString(),
-            })
+            }),
           );
 
           console.log("💾 Admin session saved to localStorage");
@@ -147,7 +147,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const login = async (
     username: string,
-    password: string
+    password: string,
   ): Promise<boolean> => {
     setIsLoading(true);
     try {

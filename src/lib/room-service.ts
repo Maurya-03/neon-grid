@@ -15,6 +15,30 @@
   limit
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { deleteFromFirebaseStorage } from './firebase-storage';
+import { roomEventsService } from './room-events';
+
+// Helper function to extract storage path from Supabase URL
+const extractStoragePathFromUrl = (url: string): string | null => {
+  try {
+    // Skip blob URLs (mock storage)
+    if (url.startsWith('blob:')) {
+      return null;
+    }
+    
+    // Pattern: https://[project].supabase.co/storage/v1/object/public/chat-media/chat-media/filename.png
+    // Extract: chat-media/filename.png
+    const match = url.match(/\/storage\/v1\/object\/public\/chat-media\/(.+)$/);
+    if (match && match[1]) {
+      return match[1];
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error extracting storage path from URL:', error);
+    return null;
+  }
+};
 
 export interface Room {
   id?: string;
@@ -24,6 +48,10 @@ export interface Room {
   createdBy: string; // temporary username
   activeUsers: string[]; // array of temporary usernames
   locked: boolean; // for admin lock
+  allowFiles?: boolean; // allow file uploads
+  allowLinks?: boolean; // allow links in messages
+  allowReactions?: boolean; // allow message reactions (future)
+  allowThreads?: boolean; // allow thread replies (future)
 }
 
 export interface Message {
@@ -36,6 +64,7 @@ export interface Message {
   timestamp: Timestamp | Date;
   flagged: boolean; // default: false
   deleted: boolean; // default: false
+  pinned?: boolean; // optional field for pinned messages
 }
 
 const ROOMS_COLLECTION = 'rooms';
@@ -169,7 +198,11 @@ export const roomService = {
         ...roomData,
         createdAt: serverTimestamp(),
         activeUsers: [], // Initialize empty array
-        locked: false // Default to unlocked
+        locked: false, // Default to unlocked
+        allowFiles: true, // Default to allow file uploads
+        allowLinks: true, // Default to allow links
+        allowReactions: false, // Default to disabled (future feature)
+        allowThreads: false // Default to disabled (future feature)
       };
       
       console.log('Room data to be saved:', newRoomData);
@@ -177,11 +210,76 @@ export const roomService = {
       const docRef = await addDoc(collection(db, ROOMS_COLLECTION), newRoomData);
 
       console.log('Room created successfully, doc ID:', docRef.id);
+      
+      // Log room creation event
+      await roomEventsService.logRoomCreated(docRef.id, roomData.createdBy);
+      
       return docRef.id;
     } catch (error) {
       console.error('Detailed Firebase error creating room:', error);
       console.error('Error code:', error.code);
       console.error('Error message:', error.message);
+      throw error;
+    }
+  },
+
+  // Update room settings
+  async updateRoom(roomId: string, updates: Partial<Room>): Promise<void> {
+    try {
+      const roomRef = doc(db, ROOMS_COLLECTION, roomId);
+      await updateDoc(roomRef, updates);
+      console.log('✅ Room updated:', roomId, updates);
+    } catch (error) {
+      console.error('❌ Error updating room:', error);
+      throw error;
+    }
+  },
+
+  // Clear all messages in a room
+  async clearRoomMessages(roomId: string): Promise<void> {
+    try {
+      console.log('🗑️ Clearing all messages in room:', roomId);
+      
+      // Step 1: Get all messages
+      const messagesRef = collection(db, ROOMS_COLLECTION, roomId, MESSAGES_COLLECTION);
+      const messagesSnapshot = await getDocs(messagesRef);
+      
+      console.log(`📊 Found ${messagesSnapshot.docs.length} messages to delete`);
+      
+      // Step 2: Delete media files from storage
+      const mediaFilesToDelete: string[] = [];
+      messagesSnapshot.docs.forEach(messageDoc => {
+        const data = messageDoc.data();
+        const mediaUrl = data.mediaUrl || data.mediaURL;
+        if (mediaUrl && typeof mediaUrl === 'string') {
+          const storagePath = extractStoragePathFromUrl(mediaUrl);
+          if (storagePath) {
+            mediaFilesToDelete.push(storagePath);
+          }
+        }
+      });
+      
+      if (mediaFilesToDelete.length > 0) {
+        console.log(`🗑️ Deleting ${mediaFilesToDelete.length} media files from storage`);
+        const storageDeletePromises = mediaFilesToDelete.map(path => 
+          deleteFromFirebaseStorage(path).catch(err => {
+            console.warn(`⚠️ Failed to delete storage file ${path}:`, err);
+            // Continue even if storage deletion fails
+          })
+        );
+        await Promise.all(storageDeletePromises);
+        console.log('✅ Media files deleted from storage');
+      }
+      
+      // Step 3: Delete all message documents
+      const deletePromises = messagesSnapshot.docs.map(messageDoc => 
+        deleteDoc(doc(db, ROOMS_COLLECTION, roomId, MESSAGES_COLLECTION, messageDoc.id))
+      );
+      
+      await Promise.all(deletePromises);
+      console.log('✅ All messages cleared from room');
+    } catch (error) {
+      console.error('❌ Error clearing room messages:', error);
       throw error;
     }
   },
@@ -240,6 +338,7 @@ export const roomService = {
           hasMediaUrl: !!mediaUrl,
           mediaUrl: mediaUrl,
           mediaType: mediaType,
+          pinned: data.pinned,
           allFields: Object.keys(data)
         });
         
@@ -265,7 +364,8 @@ export const roomService = {
           type: type,
           timestamp: data.timestamp,
           flagged: data.flagged ?? false,
-          deleted: data.deleted ?? false
+          deleted: data.deleted ?? false,
+          pinned: data.pinned ?? false
         };
         
         return message;
@@ -328,16 +428,87 @@ export const roomService = {
   // Admin functions
   async deleteRoom(roomId: string): Promise<void> {
     try {
+      console.log('🗑️ Deleting room and all its contents:', roomId);
+      
+      // Step 1: Get all messages to find media files
+      const messagesRef = collection(db, ROOMS_COLLECTION, roomId, MESSAGES_COLLECTION);
+      const messagesSnapshot = await getDocs(messagesRef);
+      
+      console.log(`📊 Found ${messagesSnapshot.docs.length} messages to delete`);
+      
+      // Step 2: Delete media files from storage
+      const mediaFilesToDelete: string[] = [];
+      messagesSnapshot.docs.forEach(messageDoc => {
+        const data = messageDoc.data();
+        const mediaUrl = data.mediaUrl || data.mediaURL;
+        if (mediaUrl && typeof mediaUrl === 'string') {
+          const storagePath = extractStoragePathFromUrl(mediaUrl);
+          if (storagePath) {
+            mediaFilesToDelete.push(storagePath);
+          }
+        }
+      });
+      
+      if (mediaFilesToDelete.length > 0) {
+        console.log(`🗑️ Deleting ${mediaFilesToDelete.length} media files from storage`);
+        const storageDeletePromises = mediaFilesToDelete.map(path => 
+          deleteFromFirebaseStorage(path).catch(err => {
+            console.warn(`⚠️ Failed to delete storage file ${path}:`, err);
+            // Continue even if storage deletion fails
+          })
+        );
+        await Promise.all(storageDeletePromises);
+        console.log('✅ Media files deleted from storage');
+      }
+      
+      // Step 3: Delete all message documents
+      const deletePromises = messagesSnapshot.docs.map(messageDoc => 
+        deleteDoc(doc(db, ROOMS_COLLECTION, roomId, MESSAGES_COLLECTION, messageDoc.id))
+      );
+      
+      await Promise.all(deletePromises);
+      console.log('✅ All messages deleted');
+      
+      // Step 4: Delete the room document itself
       await deleteDoc(doc(db, ROOMS_COLLECTION, roomId));
+      console.log('✅ Room document deleted');
+      
+      console.log('✅ Room and all contents successfully deleted');
     } catch (error) {
-      console.error('Error deleting room:', error);
+      console.error('❌ Error deleting room:', error);
       throw error;
     }
   },
 
   async deleteMessage(roomId: string, messageId: string): Promise<void> {
     try {
-      await deleteDoc(doc(db, ROOMS_COLLECTION, roomId, MESSAGES_COLLECTION, messageId));
+      // Step 1: Get the message to check for media files
+      const messageRef = doc(db, ROOMS_COLLECTION, roomId, MESSAGES_COLLECTION, messageId);
+      const messageDoc = await getDoc(messageRef);
+      
+      if (messageDoc.exists()) {
+        const data = messageDoc.data();
+        const mediaUrl = data.mediaUrl || data.mediaURL;
+        
+        // Step 2: Delete media file from storage if it exists
+        if (mediaUrl && typeof mediaUrl === 'string') {
+          const storagePath = extractStoragePathFromUrl(mediaUrl);
+          if (storagePath) {
+            console.log('🗑️ Deleting media file from storage:', storagePath);
+            try {
+              await deleteFromFirebaseStorage(storagePath);
+              console.log('✅ Media file deleted from storage');
+            } catch (storageError) {
+              console.warn('⚠️ Failed to delete media file from storage:', storageError);
+              // Continue with message deletion even if storage deletion fails
+            }
+          }
+        }
+      }
+      
+      // Step 3: Delete the message document
+      await deleteDoc(messageRef);
+      console.log('✅ Message deleted');
     } catch (error) {
       console.error('Error deleting message:', error);
       throw error;
@@ -350,6 +521,34 @@ export const roomService = {
       await updateDoc(messageRef, { flagged });
     } catch (error) {
       console.error('Error flagging message:', error);
+      throw error;
+    }
+  },
+
+  async togglePinMessage(roomId: string, messageId: string, pinned: boolean): Promise<void> {
+    try {
+      console.log('📌 Toggling pin message:', { roomId, messageId, pinned });
+      
+      if (!roomId || !messageId) {
+        throw new Error('Missing roomId or messageId');
+      }
+      
+      const messageRef = doc(db, ROOMS_COLLECTION, roomId, MESSAGES_COLLECTION, messageId);
+      
+      console.log('📌 Message reference created:', messageRef.path);
+      
+      await updateDoc(messageRef, { pinned });
+      
+      console.log(`✅ Message ${pinned ? 'pinned' : 'unpinned'} successfully`);
+    } catch (error) {
+      console.error('❌ Error toggling pin message:', error);
+      console.error('❌ Error details:', {
+        message: (error as Error).message,
+        code: (error as any).code,
+        roomId,
+        messageId,
+        pinned
+      });
       throw error;
     }
   },
@@ -415,28 +614,40 @@ export const roomService = {
   async getMediaMessages(roomId: string): Promise<Message[]> {
     try {
       const messagesRef = collection(db, ROOMS_COLLECTION, roomId, MESSAGES_COLLECTION);
-      const mediaQuery = query(
-        messagesRef, 
-        where('mediaUrl', '!=', null),
-        where('deleted', '==', false),
-        orderBy('timestamp', 'desc')
-      );
+      // Get all messages without any index requirements, then filter in JavaScript
+      const snapshot = await getDocs(messagesRef);
       
-      const snapshot = await getDocs(mediaQuery);
-      return snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          sender: data.sender,
-          text: data.text ?? null,
-          mediaUrl: data.mediaUrl ?? null,
-          mediaType: data.mediaType ?? null,
-          type: data.type ?? 'media',
-          timestamp: data.timestamp,
-          flagged: data.flagged ?? false,
-          deleted: data.deleted ?? false
-        } as Message;
-      });
+      console.log(`📊 getMediaMessages for room ${roomId}: found ${snapshot.docs.length} total messages`);
+      
+      // Filter for non-deleted messages with media URLs and sort by timestamp
+      const mediaMessages = snapshot.docs
+        .map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            sender: data.sender,
+            text: data.text ?? null,
+            mediaUrl: data.mediaUrl ?? null,
+            mediaType: data.mediaType ?? null,
+            type: data.type ?? 'media',
+            timestamp: data.timestamp,
+            flagged: data.flagged ?? false,
+            deleted: data.deleted ?? false
+          } as Message;
+        })
+        .filter(msg => {
+          const hasMedia = !!(msg.mediaUrl && msg.mediaUrl.trim() !== '');
+          const notDeleted = !msg.deleted;
+          return hasMedia && notDeleted;
+        })
+        .sort((a, b) => {
+          const aTime = a.timestamp instanceof Date ? a.timestamp.getTime() : a.timestamp.toMillis();
+          const bTime = b.timestamp instanceof Date ? b.timestamp.getTime() : b.timestamp.toMillis();
+          return bTime - aTime; // Descending order (newest first)
+        });
+      
+      console.log(`📊 getMediaMessages for room ${roomId}: filtered to ${mediaMessages.length} media messages`);
+      return mediaMessages;
     } catch (error) {
       console.error('Error getting media messages:', error);
       throw error;
