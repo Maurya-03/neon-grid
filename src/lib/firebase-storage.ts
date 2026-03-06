@@ -63,6 +63,10 @@ export const uploadToFirebaseStorage = async (
   }
 
   // Real Supabase Storage implementation
+  if (!supabase) {
+    throw new Error('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.local');
+  }
+
   console.log('📤 Uploading to Supabase Storage:', fileName);
 
   try {

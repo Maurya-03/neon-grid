@@ -354,44 +354,49 @@ export const roomService = {
     }
   },
 
+  // Get a single room by ID
+  async getRoom(roomId: string): Promise<Room | null> {
+    try {
+      const roomRef = doc(db, ROOMS_COLLECTION, roomId);
+      const roomSnap = await getDoc(roomRef);
+      if (!roomSnap.exists()) return null;
+      return { id: roomSnap.id, ...roomSnap.data() } as Room;
+    } catch (error) {
+      console.error('Error getting room:', error);
+      throw error;
+    }
+  },
+
   // User tracking functions
   async joinRoom(roomId: string, username: string): Promise<void> {
     try {
       const roomRef = doc(db, ROOMS_COLLECTION, roomId);
-      const roomSnap = await getDocs(query(collection(db, ROOMS_COLLECTION), where('__name__', '==', roomId)));
-      
-      if (!roomSnap.empty) {
-        const roomData = roomSnap.docs[0].data() as Room;
+      const roomSnap = await getDoc(roomRef);
+      if (roomSnap.exists()) {
+        const roomData = roomSnap.data() as Room;
         const activeUsers = roomData.activeUsers || [];
-        
         if (!activeUsers.includes(username)) {
-          await updateDoc(roomRef, {
-            activeUsers: [...activeUsers, username]
-          });
+          await updateDoc(roomRef, { activeUsers: [...activeUsers, username] });
         }
       }
     } catch (error) {
       console.error('Error joining room:', error);
-      throw error;
     }
   },
 
   async leaveRoom(roomId: string, username: string): Promise<void> {
     try {
       const roomRef = doc(db, ROOMS_COLLECTION, roomId);
-      const roomSnap = await getDocs(query(collection(db, ROOMS_COLLECTION), where('__name__', '==', roomId)));
-      
-      if (!roomSnap.empty) {
-        const roomData = roomSnap.docs[0].data() as Room;
+      const roomSnap = await getDoc(roomRef);
+      if (roomSnap.exists()) {
+        const roomData = roomSnap.data() as Room;
         const activeUsers = roomData.activeUsers || [];
-        
         await updateDoc(roomRef, {
-          activeUsers: activeUsers.filter(user => user !== username)
+          activeUsers: activeUsers.filter(u => u !== username)
         });
       }
     } catch (error) {
       console.error('Error leaving room:', error);
-      throw error;
     }
   },
 

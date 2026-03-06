@@ -56,34 +56,11 @@ export function ChatRoom({ roomId }: ChatRoomProps) {
 
     const loadData = async () => {
       try {
-        console.log("🚀 Starting to load room data for roomId:", roomId);
-
-        // Test Firebase connection first
-        console.log("🧪 Testing Firebase connection before loading room...");
-        const connectionOk = await roomService.testConnection();
-        if (!connectionOk) {
-          console.error("❌ Firebase connection failed - cannot proceed");
-          setIsLoading(false);
-          return;
-        }
-
-        console.log("✅ Firebase connection OK, loading rooms...");
-        const rooms = await roomService.getRooms();
-        console.log("📦 Got rooms:", rooms.length, "total rooms");
-
-        const currentRoom = rooms.find((r) => r.id === roomId);
-        console.log("🎯 Looking for room with ID:", roomId);
-        console.log(
-          "🏠 Found room:",
-          currentRoom ? currentRoom.name : "NOT FOUND",
-        );
-
-        setRoom(currentRoom || null);
+        const currentRoom = await roomService.getRoom(roomId);
+        setRoom(currentRoom);
         setIsLoading(false);
-        console.log("✅ Room loading completed");
       } catch (error) {
         console.error("❌ Failed to load room:", error);
-        console.error("🔍 Error details:", error);
         setIsLoading(false);
       }
     };
