@@ -16,7 +16,6 @@ import {
   PanelLeftClose,
   PanelLeft,
   Lock,
-  Pin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,8 +27,6 @@ import { uploadToFirebaseStorage } from "@/lib/firebase-storage";
 import { presenceService } from "@/lib/presence-service";
 import { roomEventsService } from "@/lib/room-events";
 import { RoomInfoSidebar } from "@/components/room/RoomInfoSidebar";
-import { MessageActionsMenu } from "@/components/messages/MessageActionsMenu";
-import { PinnedMessages } from "@/components/room/PinnedMessages";
 
 // Helper function to safely convert Firebase Timestamp to Date
 const toSafeDate = (timestamp: any): Date | null => {
@@ -594,13 +591,6 @@ export function ChatRoom({ roomId }: ChatRoomProps) {
             </div>
           )}
 
-          {/* Pinned Messages */}
-          <PinnedMessages
-            roomId={roomId}
-            messages={messages}
-            onJumpToMessage={scrollToMessage}
-          />
-
           {/* Messages List */}
           <div
             className="flex-1 overflow-y-auto p-4 space-y-4"
@@ -623,7 +613,6 @@ export function ChatRoom({ roomId }: ChatRoomProps) {
               messages.map((message) => (
                 <div
                   key={message.id}
-                  id={message.id}
                   ref={(el) => {
                     if (el && message.id) {
                       messageRefs.current.set(message.id, el);
@@ -636,28 +625,12 @@ export function ChatRoom({ roomId }: ChatRoomProps) {
                   } transition-all duration-300`}
                 >
                   <div
-                    className={`group relative max-w-[70%] min-h-[60px] transition-all duration-300 animate-fade-in-glow ${
+                    className={`max-w-[70%] transition-all duration-300 animate-fade-in-glow ${
                       message.sender === user?.username
                         ? "bg-bg-800/30 border border-neon-cyan text-text-primary shadow-glow-cyan"
                         : "bg-bg-800/30 border border-neon-violet/50 text-text-primary hover:border-neon-violet hover:shadow-glow-violet"
-                    } ${message.pinned ? "border-neon-gold/50 shadow-glow-gold" : ""} rounded-md p-5 pr-16 backdrop-blur-sm`}
+                    } rounded-md p-4 backdrop-blur-sm`}
                   >
-                    {/* Pin Indicator */}
-                    {message.pinned && (
-                      <div className="absolute top-2 left-2">
-                        <Pin className="h-3 w-3 text-neon-gold" />
-                      </div>
-                    )}
-
-                    {/* Message Actions Menu */}
-                    <div className="absolute -top-2 -right-2 z-10">
-                      <MessageActionsMenu
-                        message={message}
-                        roomId={roomId}
-                        currentUsername={user?.username}
-                      />
-                    </div>
-
                     {/* Sender name (for messages from others) */}
                     {message.sender !== user?.username && (
                       <div className="text-xs text-neon-violet font-medium mb-2 uppercase tracking-wider font-orbitron">
@@ -807,118 +780,125 @@ export function ChatRoom({ roomId }: ChatRoomProps) {
 
           {/* Message Input */}
           <div className="p-4 bg-bg/95 backdrop-blur-sm border-t border-neon-cyan/20 flex-shrink-0">
-            {selectedFile && (
-              <div className="mb-4 p-3 bg-bg-800/30 border border-neon-gold/50 rounded-md flex items-center justify-between backdrop-blur-sm">
-                <div className="flex items-center space-x-3">
-                  {selectedFile.type === "application/pdf" ? (
-                    <FileText className="h-5 w-5 text-neon-cyan" />
-                  ) : selectedFile.type.includes("word") ||
-                    selectedFile.type.includes("document") ? (
-                    <FileText className="h-5 w-5 text-neon-violet" />
-                  ) : selectedFile.type.includes("presentation") ||
-                    selectedFile.type.includes("powerpoint") ? (
-                    <Presentation className="h-5 w-5 text-neon-gold" />
-                  ) : selectedFile.type.includes("spreadsheet") ||
-                    selectedFile.type.includes("excel") ? (
-                    <FileSpreadsheet className="h-5 w-5 text-neon-green" />
-                  ) : selectedFile.type.startsWith("video/") ? (
-                    <Upload className="h-5 w-5 text-neon-violet" />
-                  ) : selectedFile.type.startsWith("image/") ? (
-                    <Image className="h-5 w-5 text-neon-cyan" />
-                  ) : (
-                    <File className="h-5 w-5 text-text-tertiary" />
-                  )}
-                  <div>
-                    <p className="text-white text-sm">{selectedFile.name}</p>
-                    <p className="text-text-secondary text-xs">
-                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
+            <form onSubmit={handleSendMessage} className="space-y-2">
+              {/* Compact Attachment Preview - Above Input */}
+              {selectedFile && (
+                <div className="px-2 py-1.5 bg-bg-800/50 border border-neon-gold/50 rounded flex items-center justify-between backdrop-blur-sm">
+                  <div className="flex items-center space-x-2 min-w-0 flex-1">
+                    {selectedFile.type === "application/pdf" ? (
+                      <FileText className="h-4 w-4 text-neon-cyan flex-shrink-0" />
+                    ) : selectedFile.type.includes("word") ||
+                      selectedFile.type.includes("document") ? (
+                      <FileText className="h-4 w-4 text-neon-violet flex-shrink-0" />
+                    ) : selectedFile.type.includes("presentation") ||
+                      selectedFile.type.includes("powerpoint") ? (
+                      <Presentation className="h-4 w-4 text-neon-gold flex-shrink-0" />
+                    ) : selectedFile.type.includes("spreadsheet") ||
+                      selectedFile.type.includes("excel") ? (
+                      <FileSpreadsheet className="h-4 w-4 text-neon-green flex-shrink-0" />
+                    ) : selectedFile.type.startsWith("video/") ? (
+                      <Upload className="h-4 w-4 text-neon-violet flex-shrink-0" />
+                    ) : selectedFile.type.startsWith("image/") ? (
+                      <Image className="h-4 w-4 text-neon-cyan flex-shrink-0" />
+                    ) : (
+                      <File className="h-4 w-4 text-text-tertiary flex-shrink-0" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-white text-xs truncate">
+                        {selectedFile.name}
+                      </p>
+                      <p className="text-text-secondary text-xs">
+                        {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
                   </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setSelectedFile(null)}
+                    className="text-text-secondary hover:text-red-400 h-6 w-6 flex-shrink-0 ml-2"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
                 </div>
+              )}
+
+              {/* Input Row */}
+              <div className="flex space-x-3">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="hidden"
+                />
+
                 <Button
-                  variant="ghost"
+                  type="button"
+                  variant="outline"
                   size="icon"
-                  onClick={() => setSelectedFile(null)}
-                  className="text-text-secondary hover:text-red-400"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={
+                    isSending || room?.locked || room?.allowFiles === false
+                  }
+                  className="border-neon-violet/50 text-neon-violet hover:text-white hover:border-neon-violet hover:shadow-glow-violet hover:rotate-12 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:rotate-0"
+                  title={
+                    room?.allowFiles === false
+                      ? "File uploads are disabled in this room"
+                      : "Upload file"
+                  }
                 >
-                  <X className="h-4 w-4" />
+                  <Upload className="h-4 w-4" />
+                </Button>
+
+                <Input
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder={
+                    room?.locked ? "Room is locked..." : "Type your message..."
+                  }
+                  className="flex-1 bg-transparent border border-neon-cyan/30 focus:border-neon-cyan text-text-primary placeholder:text-text-tertiary rounded-md px-4 py-2 transition-all duration-200 focus:shadow-glow-cyan focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isSending || room?.locked}
+                  maxLength={500}
+                />
+
+                <Button
+                  type="submit"
+                  disabled={isSending || room?.locked}
+                  className="bg-transparent border border-neon-gold text-neon-gold hover:text-white hover:shadow-glow-gold hover:bg-neon-gold/5 transition-all duration-200 font-medium uppercase tracking-wider rounded-md px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => {
+                    console.log("🔘 Send button clicked:", {
+                      hasMessage: !!newMessage.trim(),
+                      hasFile: !!selectedFile,
+                      fileName: selectedFile?.name,
+                      isSending,
+                      isDisabled: isSending,
+                    });
+                  }}
+                >
+                  {isSending ? (
+                    <div className="h-4 w-4 border-2 border-bg-900 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
-            )}
 
-            <form onSubmit={handleSendMessage} className="flex space-x-3">
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileSelect}
-                accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                className="hidden"
-              />
-
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={
-                  isSending || room?.locked || room?.allowFiles === false
-                }
-                className="border-neon-violet/50 text-neon-violet hover:text-white hover:border-neon-violet hover:shadow-glow-violet hover:rotate-12 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:rotate-0"
-                title={
-                  room?.allowFiles === false
-                    ? "File uploads are disabled in this room"
-                    : "Upload file"
-                }
-              >
-                <Upload className="h-4 w-4" />
-              </Button>
-
-              <Input
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder={
-                  room?.locked ? "Room is locked..." : "Type your message..."
-                }
-                className="flex-1 bg-transparent border border-neon-cyan/30 focus:border-neon-cyan text-text-primary placeholder:text-text-tertiary rounded-md px-4 py-2 transition-all duration-200 focus:shadow-glow-cyan focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={isSending || room?.locked}
-                maxLength={500}
-              />
-
-              <Button
-                type="submit"
-                disabled={isSending || room?.locked}
-                className="bg-transparent border border-neon-gold text-neon-gold hover:text-white hover:shadow-glow-gold hover:bg-neon-gold/5 transition-all duration-200 font-medium uppercase tracking-wider rounded-md px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={() => {
-                  console.log("🔘 Send button clicked:", {
-                    hasMessage: !!newMessage.trim(),
-                    hasFile: !!selectedFile,
-                    fileName: selectedFile?.name,
-                    isSending,
-                    isDisabled: isSending,
-                  });
-                }}
-              >
-                {isSending ? (
-                  <div className="h-4 w-4 border-2 border-bg-900 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
-            </form>
-
-            {uploadProgress > 0 && uploadProgress < 100 && (
-              <div className="mt-2">
-                <div className="bg-bg-darker rounded-full h-2 border border-neon-cyan/20">
-                  <div
-                    className="bg-neon-cyan h-2 rounded-full transition-all duration-300 shadow-glow-cyan"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
+              {uploadProgress > 0 && uploadProgress < 100 && (
+                <div>
+                  <div className="bg-bg-darker rounded-full h-2 border border-neon-cyan/20">
+                    <div
+                      className="bg-neon-cyan h-2 rounded-full transition-all duration-300 shadow-glow-cyan"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-text-secondary mt-1">
+                    Uploading... {uploadProgress}%
+                  </p>
                 </div>
-                <p className="text-xs text-text-secondary mt-1">
-                  Uploading... {uploadProgress}%
-                </p>
-              </div>
-            )}
+              )}
+            </form>
           </div>
         </main>
       </div>

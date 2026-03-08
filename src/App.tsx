@@ -39,26 +39,36 @@ const App = () => {
           <Sonner />
           <UsernameDialog />
           <BrowserRouter>
-            <div className="min-h-screen grid-bg">
-              <Navigation />
-              <main className="pt-16">
-                <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/rooms/:roomId" element={<RoomPage />} />
-                  <Route path="/wireframe/:id" element={<WireframeRoom />} />
-                  <Route
-                    path="/admin"
-                    element={
-                      <ProtectedAdminRoute>
-                        <AdminDashboard />
-                      </ProtectedAdminRoute>
-                    }
-                  />
-                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </main>
-            </div>
+            <Routes>
+              {/* Chat room pages - full screen without navigation */}
+              <Route path="/rooms/:roomId" element={<RoomPage />} />
+              <Route path="/wireframe/:id" element={<WireframeRoom />} />
+
+              {/* Other pages - with navigation and padding */}
+              <Route
+                path="/*"
+                element={
+                  <div className="min-h-screen grid-bg">
+                    <Navigation />
+                    <main className="pt-16">
+                      <Routes>
+                        <Route path="/" element={<Index />} />
+                        <Route
+                          path="/admin"
+                          element={
+                            <ProtectedAdminRoute>
+                              <AdminDashboard />
+                            </ProtectedAdminRoute>
+                          }
+                        />
+                        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                    </main>
+                  </div>
+                }
+              />
+            </Routes>
           </BrowserRouter>
         </TooltipProvider>
       </AdminProvider>

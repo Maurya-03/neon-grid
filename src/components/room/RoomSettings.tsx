@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { Room, roomService } from "@/lib/room-service";
-import { roomEventsService } from "@/lib/room-events";
 import { useAdmin } from "@/lib/admin-service";
-import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -14,17 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Settings,
-  Lock,
-  Unlock,
-  Upload,
-  Link as LinkIcon,
-  Heart,
-  MessageCircle,
-  Trash2,
-  AlertTriangle,
-} from "lucide-react";
+import { Trash2, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface RoomSettingsProps {
@@ -42,31 +30,6 @@ export function RoomSettings({ room }: RoomSettingsProps) {
   if (!session?.isAuthenticated) {
     return null;
   }
-
-  const updateRoomSetting = async (field: string, value: boolean) => {
-    if (!room.id) return;
-
-    setIsUpdating(true);
-    try {
-      await roomService.updateRoom(room.id, { [field]: value });
-
-      // Log the event
-      if (field === "locked") {
-        if (value) {
-          await roomEventsService.logRoomLocked(room.id, session.username);
-        } else {
-          await roomEventsService.logRoomUnlocked(room.id, session.username);
-        }
-      }
-
-      console.log(`✅ Room ${field} updated to ${value}`);
-    } catch (error) {
-      console.error(`❌ Failed to update ${field}:`, error);
-      alert(`Failed to update setting: ${error}`);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
 
   const handleClearMessages = async () => {
     if (!room.id) return;
@@ -103,114 +66,6 @@ export function RoomSettings({ room }: RoomSettingsProps) {
 
   return (
     <div className="space-y-6">
-      {/* Permission Toggles */}
-      <div className="space-y-4">
-        {/* Lock Room */}
-        <div className="flex items-center justify-between p-3 rounded-lg border border-neon-cyan/20 hover:border-neon-cyan/40 bg-bg-800/30 transition-all">
-          <div className="flex items-center gap-3">
-            {room.locked ? (
-              <Lock className="h-4 w-4 text-neon-red" />
-            ) : (
-              <Unlock className="h-4 w-4 text-neon-green" />
-            )}
-            <div>
-              <p className="text-sm font-medium text-text-primary">Lock Room</p>
-              <p className="text-xs text-text-tertiary">
-                Prevent users from sending messages
-              </p>
-            </div>
-          </div>
-          <Switch
-            checked={room.locked || false}
-            onCheckedChange={(checked) => updateRoomSetting("locked", checked)}
-            disabled={isUpdating}
-            className="data-[state=checked]:bg-neon-red"
-          />
-        </div>
-
-        {/* Allow File Uploads */}
-        <div className="flex items-center justify-between p-3 rounded-lg border border-neon-violet/20 hover:border-neon-violet/40 bg-bg-800/30 transition-all">
-          <div className="flex items-center gap-3">
-            <Upload className="h-4 w-4 text-neon-violet" />
-            <div>
-              <p className="text-sm font-medium text-text-primary">
-                Allow File Uploads
-              </p>
-              <p className="text-xs text-text-tertiary">
-                Enable users to share files
-              </p>
-            </div>
-          </div>
-          <Switch
-            checked={room.allowFiles ?? true}
-            onCheckedChange={(checked) =>
-              updateRoomSetting("allowFiles", checked)
-            }
-            disabled={isUpdating}
-            className="data-[state=checked]:bg-neon-violet"
-          />
-        </div>
-
-        {/* Allow Links */}
-        <div className="flex items-center justify-between p-3 rounded-lg border border-neon-blue/20 hover:border-neon-blue/40 bg-bg-800/30 transition-all">
-          <div className="flex items-center gap-3">
-            <LinkIcon className="h-4 w-4 text-neon-blue" />
-            <div>
-              <p className="text-sm font-medium text-text-primary">
-                Allow Links
-              </p>
-              <p className="text-xs text-text-tertiary">
-                Users can share URLs in messages
-              </p>
-            </div>
-          </div>
-          <Switch
-            checked={room.allowLinks ?? true}
-            onCheckedChange={(checked) =>
-              updateRoomSetting("allowLinks", checked)
-            }
-            disabled={isUpdating}
-            className="data-[state=checked]:bg-neon-blue"
-          />
-        </div>
-
-        {/* Allow Reactions (Future feature) */}
-        <div className="flex items-center justify-between p-3 rounded-lg border border-neon-magenta/20 hover:border-neon-magenta/40 bg-bg-800/30 transition-all opacity-60 cursor-not-allowed">
-          <div className="flex items-center gap-3">
-            <Heart className="h-4 w-4 text-neon-magenta" />
-            <div>
-              <p className="text-sm font-medium text-text-primary">
-                Allow Reactions
-              </p>
-              <p className="text-xs text-text-tertiary">Coming soon...</p>
-            </div>
-          </div>
-          <Switch
-            checked={room.allowReactions ?? true}
-            disabled={true}
-            className="data-[state=checked]:bg-neon-magenta"
-          />
-        </div>
-
-        {/* Allow Thread Replies (Future feature) */}
-        <div className="flex items-center justify-between p-3 rounded-lg border border-neon-gold/20 hover:border-neon-gold/40 bg-bg-800/30 transition-all opacity-60 cursor-not-allowed">
-          <div className="flex items-center gap-3">
-            <MessageCircle className="h-4 w-4 text-neon-gold" />
-            <div>
-              <p className="text-sm font-medium text-text-primary">
-                Allow Thread Replies
-              </p>
-              <p className="text-xs text-text-tertiary">Coming soon...</p>
-            </div>
-          </div>
-          <Switch
-            checked={room.allowThreads ?? true}
-            disabled={true}
-            className="data-[state=checked]:bg-neon-gold"
-          />
-        </div>
-      </div>
-
       {/* Danger Zone */}
       <div className="border-2 border-neon-red/30 rounded-lg p-4 bg-neon-red/5">
         <div className="flex items-center gap-2 mb-4">

@@ -13,8 +13,10 @@ export function ActiveMembersList({ roomId }: ActiveMembersListProps) {
   useEffect(() => {
     console.log("🔵 ActiveMembersList mounted for room:", roomId);
 
-    // Subscribe to active members
-    const unsubscribe = presenceService.subscribeToActiveMembers(
+    // Subscribe to active members with guarded cleanup to avoid double-calls
+    let unsubscribe: (() => void) | undefined;
+
+    unsubscribe = presenceService.subscribeToActiveMembers(
       roomId,
       (members) => {
         console.log("✅ ActiveMembersList received members:", {
@@ -31,7 +33,14 @@ export function ActiveMembersList({ roomId }: ActiveMembersListProps) {
 
     return () => {
       console.log("🔴 ActiveMembersList unmounting for room:", roomId);
-      unsubscribe();
+      if (unsubscribe) {
+        try {
+          unsubscribe();
+        } catch (err) {
+          console.warn("⚠️ Error while unsubscribing active members:", err);
+        }
+        unsubscribe = undefined;
+      }
     };
   }, [roomId]);
 

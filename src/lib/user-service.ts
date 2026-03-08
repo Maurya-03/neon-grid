@@ -10,6 +10,7 @@ export interface AnonymousUser {
 }
 
 const USER_STORAGE_KEY = 'neon_grid_user';
+const LAST_VISITED_ROOM_KEY = 'neon_grid_last_visited_room';
 
 export const userService = {
   // Generate a random user ID
@@ -112,6 +113,25 @@ export const userService = {
     return username.trim().length >= 3 && 
            username.trim().length <= 20 && 
            /^[a-zA-Z0-9_-]+$/.test(username.trim());
+  },
+
+  // Get last visited room
+  getLastVisitedRoom(): string | null {
+    try {
+      return localStorage.getItem(LAST_VISITED_ROOM_KEY);
+    } catch (error) {
+      console.error('Error getting last visited room:', error);
+      return null;
+    }
+  },
+
+  // Set last visited room
+  setLastVisitedRoom(roomId: string): void {
+    try {
+      localStorage.setItem(LAST_VISITED_ROOM_KEY, roomId);
+    } catch (error) {
+      console.error('Error setting last visited room:', error);
+    }
   }
 };
 

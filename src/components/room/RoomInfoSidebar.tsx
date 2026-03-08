@@ -7,6 +7,8 @@ import { DocumentList } from "./DocumentList";
 import { LinksList } from "./LinksList";
 import { RoomStats } from "./RoomStats";
 import { ActivityLog } from "./ActivityLog";
+import { RoomSettings } from "./RoomSettings";
+import { useAdmin } from "@/lib/admin-service";
 import {
   Accordion,
   AccordionContent,
@@ -20,6 +22,7 @@ import {
   Pin,
   BarChart3,
   Activity,
+  Settings,
   ChevronRight,
 } from "lucide-react";
 
@@ -30,12 +33,8 @@ interface RoomInfoSidebarProps {
   onJumpToMessage: (messageId: string) => void;
 }
 
-export function RoomInfoSidebar({
-  room,
-  isOpen,
-  messages,
-  onJumpToMessage,
-}: RoomInfoSidebarProps) {
+export function RoomInfoSidebar({ room, isOpen, messages, onJumpToMessage }: RoomInfoSidebarProps) {
+  const { session } = useAdmin();
   if (!isOpen) return null;
 
   // Count items for each section
@@ -43,26 +42,22 @@ export function RoomInfoSidebar({
     const mediaCount = messages.filter((msg) => {
       if (!msg.mediaUrl || !msg.mediaType) return false;
       const type = msg.mediaType.toLowerCase();
-      return (
-        type.startsWith("image/") ||
-        type.startsWith("video/") ||
-        type.includes("gif")
-      );
+      return type.startsWith('image/') || type.startsWith('video/') || type.includes('gif');
     }).length;
 
     const docCount = messages.filter((msg) => {
       if (!msg.mediaUrl || !msg.mediaType) return false;
       const type = msg.mediaType.toLowerCase();
       return (
-        type.includes("pdf") ||
-        type.includes("doc") ||
-        type.includes("word") ||
-        type.includes("ppt") ||
-        type.includes("powerpoint") ||
-        type.includes("xls") ||
-        type.includes("excel") ||
-        type.includes("spreadsheet") ||
-        type.includes("text/plain")
+        type.includes('pdf') ||
+        type.includes('doc') ||
+        type.includes('word') ||
+        type.includes('ppt') ||
+        type.includes('powerpoint') ||
+        type.includes('xls') ||
+        type.includes('excel') ||
+        type.includes('spreadsheet') ||
+        type.includes('text/plain')
       );
     }).length;
 
@@ -73,7 +68,7 @@ export function RoomInfoSidebar({
       const urlRegex = /(https?:\/\/[^\s<>]+[^\s<>.,;:!?'")\]])/gi;
       const matches = msg.text.match(urlRegex);
       if (matches) {
-        matches.forEach((url) => linkSet.add(url));
+        matches.forEach(url => linkSet.add(url));
       }
     });
 
@@ -120,92 +115,62 @@ export function RoomInfoSidebar({
           {/* Content Explorer */}
           <Accordion type="multiple" className="space-y-2">
             {/* Media Section */}
-            <AccordionItem
-              value="media"
-              className="border border-neon-cyan/20 rounded-lg overflow-hidden bg-bg-800/20"
-            >
+            <AccordionItem value="media" className="border border-neon-cyan/20 rounded-lg overflow-hidden bg-bg-800/20">
               <AccordionTrigger className="px-4 py-3 hover:bg-neon-cyan/5 hover:no-underline">
                 <div className="flex items-center gap-3 w-full">
                   <div className="p-2 bg-neon-cyan/10 rounded-md border border-neon-cyan/30">
                     <Image className="h-4 w-4 text-neon-cyan" />
                   </div>
                   <div className="flex-1 text-left">
-                    <span className="text-sm font-medium text-text-primary">
-                      Media
-                    </span>
+                    <span className="text-sm font-medium text-text-primary">Media</span>
                     {counts.media > 0 && (
-                      <span className="ml-2 text-xs text-text-tertiary">
-                        ({counts.media})
-                      </span>
+                      <span className="ml-2 text-xs text-text-tertiary">({counts.media})</span>
                     )}
                   </div>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-4 pb-4">
-                <MediaGallery
-                  messages={messages}
-                  onJumpToMessage={onJumpToMessage}
-                />
+                <MediaGallery messages={messages} onJumpToMessage={onJumpToMessage} />
               </AccordionContent>
             </AccordionItem>
 
             {/* Documents Section */}
-            <AccordionItem
-              value="documents"
-              className="border border-neon-violet/20 rounded-lg overflow-hidden bg-bg-800/20"
-            >
+            <AccordionItem value="documents" className="border border-neon-violet/20 rounded-lg overflow-hidden bg-bg-800/20">
               <AccordionTrigger className="px-4 py-3 hover:bg-neon-violet/5 hover:no-underline">
                 <div className="flex items-center gap-3 w-full">
                   <div className="p-2 bg-neon-violet/10 rounded-md border border-neon-violet/30">
                     <FileText className="h-4 w-4 text-neon-violet" />
                   </div>
                   <div className="flex-1 text-left">
-                    <span className="text-sm font-medium text-text-primary">
-                      Documents
-                    </span>
+                    <span className="text-sm font-medium text-text-primary">Documents</span>
                     {counts.documents > 0 && (
-                      <span className="ml-2 text-xs text-text-tertiary">
-                        ({counts.documents})
-                      </span>
+                      <span className="ml-2 text-xs text-text-tertiary">({counts.documents})</span>
                     )}
                   </div>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-4 pb-4">
-                <DocumentList
-                  messages={messages}
-                  onJumpToMessage={onJumpToMessage}
-                />
+                <DocumentList messages={messages} onJumpToMessage={onJumpToMessage} />
               </AccordionContent>
             </AccordionItem>
 
             {/* Links Section */}
-            <AccordionItem
-              value="links"
-              className="border border-neon-blue/20 rounded-lg overflow-hidden bg-bg-800/20"
-            >
+            <AccordionItem value="links" className="border border-neon-blue/20 rounded-lg overflow-hidden bg-bg-800/20">
               <AccordionTrigger className="px-4 py-3 hover:bg-neon-blue/5 hover:no-underline">
                 <div className="flex items-center gap-3 w-full">
                   <div className="p-2 bg-neon-blue/10 rounded-md border border-neon-blue/30">
                     <LinkIcon className="h-4 w-4 text-neon-blue" />
                   </div>
                   <div className="flex-1 text-left">
-                    <span className="text-sm font-medium text-text-primary">
-                      Links
-                    </span>
+                    <span className="text-sm font-medium text-text-primary">Links</span>
                     {counts.links > 0 && (
-                      <span className="ml-2 text-xs text-text-tertiary">
-                        ({counts.links})
-                      </span>
+                      <span className="ml-2 text-xs text-text-tertiary">({counts.links})</span>
                     )}
                   </div>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-4 pb-4">
-                <LinksList
-                  messages={messages}
-                  onJumpToMessage={onJumpToMessage}
-                />
+                <LinksList messages={messages} onJumpToMessage={onJumpToMessage} />
               </AccordionContent>
             </AccordionItem>
           </Accordion>
@@ -213,19 +178,14 @@ export function RoomInfoSidebar({
           {/* Statistics and Activity Sections */}
           <Accordion type="multiple" className="space-y-2 mt-6">
             {/* Room Stats Section */}
-            <AccordionItem
-              value="stats"
-              className="border border-neon-gold/20 rounded-lg overflow-hidden bg-bg-800/20"
-            >
+            <AccordionItem value="stats" className="border border-neon-gold/20 rounded-lg overflow-hidden bg-bg-800/20">
               <AccordionTrigger className="px-4 py-3 hover:bg-neon-gold/5 hover:no-underline">
                 <div className="flex items-center gap-3 w-full">
                   <div className="p-2 bg-neon-gold/10 rounded-md border border-neon-gold/30">
                     <BarChart3 className="h-4 w-4 text-neon-gold" />
                   </div>
                   <div className="flex-1 text-left">
-                    <span className="text-sm font-medium text-text-primary">
-                      Room Stats
-                    </span>
+                    <span className="text-sm font-medium text-text-primary">Room Stats</span>
                   </div>
                 </div>
               </AccordionTrigger>
@@ -235,19 +195,14 @@ export function RoomInfoSidebar({
             </AccordionItem>
 
             {/* Activity Log Section */}
-            <AccordionItem
-              value="activity"
-              className="border border-neon-green/20 rounded-lg overflow-hidden bg-bg-800/20"
-            >
+            <AccordionItem value="activity" className="border border-neon-green/20 rounded-lg overflow-hidden bg-bg-800/20">
               <AccordionTrigger className="px-4 py-3 hover:bg-neon-green/5 hover:no-underline">
                 <div className="flex items-center gap-3 w-full">
                   <div className="p-2 bg-neon-green/10 rounded-md border border-neon-green/30">
                     <Activity className="h-4 w-4 text-neon-green" />
                   </div>
                   <div className="flex-1 text-left">
-                    <span className="text-sm font-medium text-text-primary">
-                      Activity
-                    </span>
+                    <span className="text-sm font-medium text-text-primary">Activity</span>
                   </div>
                 </div>
               </AccordionTrigger>
@@ -256,6 +211,28 @@ export function RoomInfoSidebar({
               </AccordionContent>
             </AccordionItem>
           </Accordion>
+
+          {/* Settings Section (Admin Only) */}
+          {session?.isAuthenticated && (
+            <Accordion type="multiple" className="space-y-2 mt-6">
+              <AccordionItem value="settings" className="border border-neon-red/20 rounded-lg overflow-hidden bg-bg-800/20">
+                <AccordionTrigger className="px-4 py-3 hover:bg-neon-red/5 hover:no-underline">
+                  <div className="flex items-center gap-3 w-full">
+                    <div className="p-2 bg-neon-red/10 rounded-md border border-neon-red/30">
+                      <Settings className="h-4 w-4 text-neon-red" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <span className="text-sm font-medium text-text-primary">Settings</span>
+                      <span className="ml-2 text-xs text-neon-red">(Admin)</span>
+                    </div>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4">
+                  <RoomSettings room={room} />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          )}
 
           {/* Future Features */}
           <div className="space-y-3 mt-6">

@@ -42,9 +42,9 @@ service cloud.firestore {
             (request.resource.data.mediaUrl is string && request.resource.data.mediaUrl.size() > 0)
           );
 
-        // Allow updates for admin moderation (flagging/deleting/pinning) - client-side validation
+        // Allow updates for admin moderation (flagging/deleting) - client-side validation
         allow update: if
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['flagged', 'deleted', 'pinned']);
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['flagged', 'deleted']);
 
         // Allow deletion for admin operations - client-side validation
         allow delete: if true;

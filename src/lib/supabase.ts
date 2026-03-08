@@ -10,7 +10,7 @@ export const isSupabaseConfigured = (): boolean => {
     supabaseAnonKey &&
     supabaseUrl.startsWith('https://') &&
     !supabaseUrl.includes('placeholder') &&
-    supabaseAnonKey.startsWith('eyJ')
+    (supabaseAnonKey.startsWith('eyJ') || supabaseAnonKey.startsWith('sb_publishable_'))
   );
 };
 

@@ -18,7 +18,7 @@ import chatIcon from "@/assets/chat-icon.png";
 import adminIcon from "@/assets/admin-icon.png";
 import { CreateRoomDialog } from "@/components/rooms/CreateRoomDialog";
 import { roomService, Room } from "@/lib/room-service";
-import { useAnonymousUser } from "@/lib/user-service";
+import { useAnonymousUser, userService } from "@/lib/user-service";
 
 const features = [
   {
@@ -78,6 +78,26 @@ const Index = () => {
     roomService.getRooms().then(setRooms).catch(console.error);
   };
 
+  // Get the active room ID (last visited room or fallback to latest created room)
+  const getActiveRoomId = (): string | null => {
+    if (rooms.length === 0) return null;
+
+    const lastVisitedRoomId = userService.getLastVisitedRoom();
+
+    // Check if the last visited room still exists in the rooms list
+    if (
+      lastVisitedRoomId &&
+      rooms.some((room) => room.id === lastVisitedRoomId)
+    ) {
+      return lastVisitedRoomId;
+    }
+
+    // Fallback to the first room (latest created)
+    return rooms[0].id;
+  };
+
+  const activeRoomId = getActiveRoomId();
+
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
@@ -101,8 +121,8 @@ const Index = () => {
               energy.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              {rooms.length > 0 && (
-                <Link to={`/rooms/${rooms[0].id}`}>
+              {activeRoomId && (
+                <Link to={`/rooms/${activeRoomId}`}>
                   <NeonButton variant="hero" size="xl" className="group">
                     Enter Active Room
                     <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />

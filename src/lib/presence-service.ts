@@ -31,21 +31,15 @@ export class PresenceService {
   // Join a room and mark user as online
   async joinRoom(userId: string, roomId: string, username: string): Promise<void> {
     try {
-      console.log('🔵 Starting joinRoom:', { userId, roomId, username });
-      
       const presenceRef = doc(db, PRESENCE_COLLECTION, `${userId}_${roomId}`);
       
-      const presenceData = {
+      await setDoc(presenceRef, {
         userId,
         roomId,
         username,
         lastActive: serverTimestamp(),
         status: 'online',
-      };
-      
-      console.log('🔵 Setting presence document:', presenceData);
-      
-      await setDoc(presenceRef, presenceData);
+      });
 
       console.log('✅ User joined room presence:', { userId, roomId, username });
 
@@ -53,11 +47,7 @@ export class PresenceService {
       this.currentUsername = username;
 
       // Log user joined event
-      try {
-        await roomEventsService.logUserJoined(roomId, username);
-      } catch (eventError) {
-        console.warn('⚠️ Failed to log user joined event:', eventError);
-      }
+      await roomEventsService.logUserJoined(roomId, username);
 
       // Start heartbeat
       this.startHeartbeat(userId, roomId, username);
@@ -66,13 +56,6 @@ export class PresenceService {
       this.setupUnloadHandler(userId, roomId);
     } catch (error) {
       console.error('❌ Error joining room presence:', error);
-      console.error('❌ Error details:', {
-        message: (error as Error).message,
-        code: (error as any).code,
-        userId,
-        roomId,
-        username
-      });
       throw error;
     }
   }
@@ -156,8 +139,6 @@ export class PresenceService {
     callback: (members: UserPresence[]) => void
   ): () => void {
     try {
-      console.log('🔍 Subscribing to active members for room:', roomId);
-      
       const presenceRef = collection(db, PRESENCE_COLLECTION);
       const q = query(
         presenceRef,
@@ -165,36 +146,21 @@ export class PresenceService {
         where('status', '==', 'online')
       );
 
-      const unsubscribe = onSnapshot(
-        q, 
-        (snapshot) => {
-          const members: UserPresence[] = snapshot.docs.map((doc) => {
-            const data = doc.data();
-            return {
-              userId: data.userId,
-              roomId: data.roomId,
-              username: data.username,
-              lastActive: data.lastActive,
-              status: data.status,
-            } as UserPresence;
-          });
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const members: UserPresence[] = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            userId: data.userId,
+            roomId: data.roomId,
+            username: data.username,
+            lastActive: data.lastActive,
+            status: data.status,
+          } as UserPresence;
+        });
 
-          console.log('👥 Active members updated:', {
-            roomId,
-            count: members.length,
-            members: members.map(m => m.username)
-          });
-          callback(members);
-        },
-        (error) => {
-          console.error('❌ Error in presence subscription:', error);
-          console.error('❌ Error details:', {
-            message: error.message,
-            code: (error as any).code,
-            roomId
-          });
-        }
-      );
+        console.log('👥 Active members updated:', members.length);
+        callback(members);
+      });
 
       this.unsubscribePresence = unsubscribe;
       return unsubscribe;
